@@ -1,0 +1,91 @@
+// pins
+const int solarTensionPin = A2;
+const int motorPin1 = 2;
+const int motorPin2 = 3;
+const int switchMotorPin = 4;
+const int magneticSensorDoorClosedPin = 5;
+const int magneticSensorDoorOpenPin = 6;
+
+// constants
+const int numSamples = 10;
+const int triggeringEventCountLimit = 2;
+const float solarVoltageThreshold = 2.0;
+const int maxTimeMotorRotation = 15000; // 15s
+
+// variables
+bool doorOpen = false;
+int triggeringEventCount = 0;
+bool ligthUp = false;
+
+void setup() {
+  //Serial.begin(9600);
+  pinMode(motorPin1, OUTPUT);
+  pinMode(motorPin2, OUTPUT);
+  pinMode(switchMotorPin, OUTPUT);
+  pinMode(magneticSensorDoorClosedPin, INPUT_PULLUP);
+  pinMode(magneticSensorDoorOpenPin, INPUT_PULLUP);
+}
+
+void loop() {
+    ligthUp = false;
+    if (getSolarVoltage() > solarVoltageThreshold) {
+      ligthUp = true;
+    }
+    
+    // a triggering event is night when the door is open or day when the door is open
+    // This condition is XOR : ^
+    if (doorOpen ^ ligthUp) {
+      triggeringEventCount++;
+    } else {
+      triggeringEventCount = 0;
+    }
+
+    //Serial.println(triggeringEventCount);
+    // After three triggering event, you switch the door.
+    if (triggeringEventCount > triggeringEventCountLimit) {
+      triggeringEventCount = 0;
+      switchDoor();
+    }
+    delay(120000); //cycle every 2min
+}
+
+float getSolarVoltage()
+{
+    int sum = 0;
+    float voltage = 0.0;
+    for (int sampleCount = 0; sampleCount < numSamples; sampleCount++) {
+      sum += analogRead(solarTensionPin);
+      delay(100);
+    }
+    // We divide the sum by the number of samples to get the average value.
+    // The average value measured is between 0 and 1024. 1024 represent 5V.
+    // So we multiply the measured by 5 and divide the result by 1024.
+    voltage = ((float)sum / (float)numSamples * 5.0) / 1024.0;
+    // time 2 because voltage mesured = real voltage * R1/(R1+R2) = real voltage * 10/20 = real voltage / 2
+    return voltage * 2;
+}
+
+void switchDoor()
+{
+  unsigned long start = millis();
+  int sensor = doorOpen ? magneticSensorDoorClosedPin : magneticSensorDoorOpenPin;
+  int pin1 = doorOpen ? motorPin1 : motorPin2;
+  int pin2 = doorOpen ? motorPin2 : motorPin1;
+
+  // activate motor
+  digitalWrite(switchMotorPin, HIGH);
+  digitalWrite(pin1, HIGH);
+  digitalWrite(pin2, LOW);
+  
+  while(digitalRead(sensor) == HIGH && (unsigned long)(millis() - start) < maxTimeMotorRotation) {    
+    delay(10);
+  }
+  
+  //turn off motor
+  digitalWrite(motorPin1, LOW);
+  digitalWrite(motorPin2, LOW);
+  digitalWrite(switchMotorPin, LOW);
+  
+  doorOpen = !doorOpen;
+  
+}
